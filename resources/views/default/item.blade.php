@@ -78,6 +78,22 @@
                         <span class="text-danger" id="imagesError"></span>
                         <div id="imagesPreview" class="d-flex flex-wrap mt-2"></div>
                     </div>
+
+                    <div class="mb-3">
+                        <label for="memo" class="form-label">Memo</label>
+                        <textarea class="form-control" id="memo" name="memo" rows="3"></textarea>
+                    </div>
+
+                    // child form section  quantities section:
+                    <div class="mb-3">
+                        <label class="form-label">Quantities</label>
+                        <div id="quantitiesContainer">
+                            <!-- Dynamic quantities will be added here -->
+                        </div>
+                        <button type="button" class="btn btn-sm btn-secondary mt-2" id="addQuantity">
+                            <i class="fas fa-plus"></i> Add Quantity
+                        </button>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -303,10 +319,10 @@ $('#itemForm').submit(function(e) {
     e.preventDefault();
     $('.text-danger').text('');
     
-    // Create FormData object
+    //createed form data object
     const formData = new FormData(this);
     
-    // For PUT requests, we need to append the _method field
+    // for put method we append this method 
     if ($('#itemId').val()) {
         formData.append('_method', 'PUT');
     }
@@ -319,7 +335,7 @@ $('#itemForm').submit(function(e) {
     
     $.ajax({
         url: url,
-        type: 'POST', // Always use POST, we handle PUT via _method
+        type: 'POST',
         data: formData,
         processData: false,
         contentType: false,
@@ -328,31 +344,63 @@ $('#itemForm').submit(function(e) {
         },
         success: function(response) {
             if (response.success) {
-                $('#itemModal').modal('hide');
-                $('body').removeClass('modal-open');
-                $('.modal-backdrop').remove();
-                
-                $('#itemForm')[0].reset();
-                $('#imagePreview').hide();
-                table.ajax.reload(null, false); 
-                toastr.success(response.message);
+                // Sync quantities after item is saved
+                if ($('#quantitiesContainer').children().length > 0) {
+                    syncQuantities(response.data.id);
+                } else {
+                    completeItemSave(response);
+                }
             }
         },
         error: function(xhr) {
-            if (xhr.status === 422) {
-                const errors = xhr.responseJSON.errors;
-                for (const field in errors) {
-                    $(`#${field}Error`).text(errors[field][0]);
-                }
-            } else {
-                toastr.error(xhr.responseJSON?.message || 'An error occurred');
-            }
+            // Error handling
         },
         complete: function() {
             submitBtn.html(originalText).prop('disabled', false);
         }
     });
 });
+
+// Update the syncQuantities function
+function syncQuantities(itemId) {
+    const quantities = [];
+    $('.quantity-row').each(function() {
+        quantities.push({
+            quantity: $(this).find('.quantity-input').val()
+        });
+    });
+
+    $.ajax({
+        url: `/items/${itemId}/quantities`,
+        type: 'POST',
+        data: {
+            _token: "{{ csrf_token() }}",
+            quantities: quantities
+        },
+        success: function(response) {
+            if (response.success) {
+                completeItemSave(response);
+            } else {
+                toastr.error(response.message || 'Error saving quantities');
+            }
+        },
+        error: function(xhr) {
+            toastr.error(xhr.responseJSON?.message || 'Error saving quantities');
+        }
+    });
+}
+
+function completeItemSave(response) {
+    $('#itemModal').modal('hide');
+    $('body').removeClass('modal-open');
+    $('.modal-backdrop').remove();
+    $('#itemForm')[0].reset();
+    $('#imagePreview').hide();
+    table.ajax.reload(null, false); 
+    toastr.success(response.message);
+}
+
+
 $('#category_id').select2({
     placeholder: "Select a category",
     allowClear: true,
@@ -374,7 +422,8 @@ $('#category_id').select2({
         $('#qrCodeContainer').show();
     }
 
-// Edit Item Button Handler
+
+// Edit Item Button Handler 
 $(document).on('click', '.edit-btn', function() {
     const itemId = $(this).data('id');
     const editUrl = `/items/${itemId}/edit`;
@@ -385,20 +434,24 @@ $(document).on('click', '.edit-btn', function() {
     
     $.get(editUrl, function(response) {
         if (response.success) {
+            // Existing fields
             $('#itemId').val(response.data.id);
-            $('#category_id').val(response.data.category_id);
+            $('#category_id').val(response.data.category_id).trigger('change');
             $('#name').val(response.data.name);
-            $('#price').val(parseFloat(response.data.price).toFixed(2)); // Ensure proper decimal format
+            $('#price').val(parseFloat(response.data.price).toFixed(2));
+            $('#memo').val(response.data.memo);
             
-            // Handle image preview
-            if (response.data.image_path) {
-                $('#imagePreview').show();
-                $('#previewImage').attr('src', '/storage/' + response.data.image_path);
-            } else {
-                $('#imagePreview').hide();
+            // Clear and reload quantities
+            $('#quantitiesContainer').empty();
+            quantityCounter = 0;
+            
+            if (response.data.quantities && response.data.quantities.length > 0) {
+                response.data.quantities.forEach((qty) => {
+                    addQuantityRow(qty.quantity);
+                });
             }
-            $('.text-danger').text('');
             
+            $('.text-danger').text('');
             $('#itemModalLabel').text('Edit Item');
             itemModal.show();
         }
@@ -489,6 +542,74 @@ $('#images').change(function() {
     });
 
    
+
+
+// child form section  quantities section:
+
+let quantityCounter = 0;
+
+// Automatically add quantity row when price is entered
+$('#price').on('change', function() {
+    if ($(this).val() > 0 && $('#quantitiesContainer').children().length === 0) {
+        addQuantityRow();
+    }
+});
+
+function addQuantityRow(quantity = 1) {
+    const price = parseFloat($('#price').val()) || 0;
+    const total = (quantity * price).toFixed(2);
+    
+    const quantityHtml = `
+        <div class="quantity-row mb-3">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-4">
+                    <label class="form-label">Quantity</label>
+                    <input type="number" class="form-control quantity-input" 
+                           name="quantities[${quantityCounter}][quantity]" 
+                           value="${quantity}"
+                           placeholder="Enter quantity" min="1" required>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Unit Price</label>
+                    <input type="text" class="form-control" value="$${price.toFixed(2)}" readonly>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Total Price</label>
+                    <input type="text" class="form-control total-price-input" 
+                           name="quantities[${quantityCounter}][total_price]"
+                           value="$${total}" readonly>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    $('#quantitiesContainer').append(quantityHtml);
+    quantityCounter++;
+}
+
+$(document).on('click', '.remove-quantity', function() {
+    $(this).closest('.quantity-row').remove();
+});
+
+// Calculate total when quantity or price changes
+$(document).on('input', '.quantity-input', function() {
+    const quantity = parseFloat($(this).val()) || 0;
+    const price = parseFloat($('#price').val()) || 0;
+    const total = (quantity * price).toFixed(2);
+    
+    $(this).closest('.quantity-row').find('.total-price-input').val('$' + total);
+});
+
+$('#price').on('input', function() {
+    const price = parseFloat($(this).val()) || 0;
+    
+    $('.quantity-row').each(function() {
+        const quantity = parseFloat($(this).find('.quantity-input').val()) || 0;
+        const total = (quantity * price).toFixed(2);
+        $(this).find('.total-price-input').val('$' + total);
+    });
+});
+
 });
 
 

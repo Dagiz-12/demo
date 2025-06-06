@@ -32,3 +32,7 @@ Route::get('/test-image', function() {
     
     return response()->json(['success' => false]);
 });
+
+
+Route::post('/items/{item}/quantities', [ItemController::class, 'syncQuantities'])
+    ->name('items.quantities.sync');

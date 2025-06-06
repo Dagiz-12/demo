@@ -80,11 +80,12 @@ class ItemController extends Controller
 
 public function createOrUpdate(Request $request)
 {
-    $rules = [
+     $rules = [
         'category_id' => 'required|exists:categories,id',
         'name' => 'required|string|max:255',
         'price' => 'required|numeric|min:0',
         'images.*' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+        'quantities.*.quantity' => 'required|integer|min:1',
     ];
 
     if (!$request->id || $request->name != Item::find($request->id)?->name) {
@@ -107,11 +108,12 @@ public function createOrUpdate(Request $request)
     }
 
     try {
-        // Create/update the item without image data
+        // Create/update the item
         $item = Item::updateOrCreate(
             ['id' => $request->id],
-            $request->only(['category_id', 'name', 'price'])
+            $request->only(['category_id', 'name', 'price', 'memo'])
         );
+
 
         // Handle multiple image uploads
         if ($request->hasFile('images')) {
@@ -130,11 +132,25 @@ public function createOrUpdate(Request $request)
                 ]);
             }
         }
+
+
+          // Handle quantities
+        if ($request->has('quantities')) {
+            $quantitiesData = collect($request->quantities)->map(function ($quantity) use ($item) {
+                return [
+                    'quantity' => $quantity['quantity'],
+                    'total_price' => $quantity['quantity'] * $item->price,
+                ];
+            })->toArray();
+
+            $item->quantities()->delete();
+            $item->quantities()->createMany($quantitiesData);
+        }
         
         return response()->json([
             'success' => true,
             'message' => $request->id ? 'Item updated successfully' : 'Item created successfully',
-            'data' => $item->load('images')
+            'data' => $item->load([ 'images', 'quantities'])
         ]);
         
     } catch (\Exception $e) {
@@ -149,20 +165,20 @@ public function createOrUpdate(Request $request)
      * Get item data for editing
      */
     public function edit($id)
-    {
-        try {
-            $item = Item::findOrFail($id);
-            return response()->json([
-                'success' => true,
-                'data' => $item
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Item not found'
-            ], 404);
-        }
+{
+    try {
+        $item = Item::with(['category', 'images', 'quantities'])->findOrFail($id);
+        return response()->json([
+            'success' => true,
+            'data' => $item
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Item not found'
+        ], 404);
     }
+}
 
     /**
      * Delete an item
@@ -210,4 +226,52 @@ public function createOrUpdate(Request $request)
         $request->merge(['id' => $id]);
         return $this->createOrUpdate($request);
     }
+
+
+
+    // Add these methods to ItemController
+
+public function syncQuantities(Request $request, $itemId)
+{
+    $validator = Validator::make($request->all(), [
+        'quantities' => 'required|array',
+        'quantities.*.quantity' => 'required|integer|min:1',
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'success' => false,
+            'errors' => $validator->errors()
+        ], 422);
+    }
+
+    try {
+        $item = Item::findOrFail($itemId);
+        
+        $quantitiesData = collect($request->quantities)->map(function ($quantity) use ($item) {
+            return [
+                'quantity' => $quantity['quantity'],
+                'total_price' => $quantity['quantity'] * $item->price,
+            ];
+        })->toArray();
+
+        // Use sync to update quantities
+        $item->quantities()->delete();
+        $item->quantities()->createMany($quantitiesData);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Quantities updated successfully',
+            'data' => $item->load('quantities')
+        ]);
+
+    } catch (\Exception $e) {
+        Log::error('Quantity sync error:', ['error' => $e->getMessage()]);
+        return response()->json([
+            'success' => false,
+            'message' => 'Error: ' . $e->getMessage()
+        ], 500);
+    }
+}
+
 }

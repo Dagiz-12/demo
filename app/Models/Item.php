@@ -13,6 +13,7 @@ class Item extends Model
         'category_id',
         'name',
         'price',
+        'memo',
         
         
     ];
@@ -25,4 +26,9 @@ class Item extends Model
     {
         return $this->hasMany(ItemImage::class);
     }
+
+    public function quantities()
+        {
+            return $this->hasMany(ItemQuantity::class);
+        }
 }
