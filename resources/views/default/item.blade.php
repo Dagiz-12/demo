@@ -20,7 +20,7 @@
                             <thead>
                                 <tr>
                                     <th width="5%">#</th>
-                                    <th>Image</th>
+                                    
                                     <th>Name</th>
                                     <th>Category</th>
                                     <th>Price</th>
@@ -51,7 +51,7 @@
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="category_id" class="form-label">Category</label>
-                        <select class="form-select" id="category_id" name="category_id" required>
+                        <select class="form-select select2" id="category_id" name="category_id" required>
                             <option value="">Select a category</option>
                             @foreach($categories as $category)
                                 <option value="{{ $category->id }}">{{ $category->name }}</option>
@@ -73,14 +73,11 @@
                         <span class="text-danger" id="priceError"></span>
                     </div>
                     <div class="mb-3">
-                        <label for="image" class="form-label">Item Image</label>
-                        <input type="file" class="form-control" id="image" name="image" accept="image/*">
-                        <span class="text-danger" id="imageError"></span>
-                        <div id="imagePreview" class="mt-2" style="display:none;">
-                            <img id="previewImage" src="#" alt="Preview" style="max-height: 100px;">
-                        </div>
+                        <label for="images" class="form-label">Item Images</label>
+                        <input type="file" class="form-control" id="images" name="images[]" multiple accept="image/*">
+                        <span class="text-danger" id="imagesError"></span>
+                        <div id="imagesPreview" class="d-flex flex-wrap mt-2"></div>
                     </div>
-                    
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -184,24 +181,7 @@ $(document).ready(function() {
                 searchable: false,
                 className: 'text-center' 
             },
-             {
-    data: 'image_path', 
-    name: 'image_path',
-    className: 'text-center',
-    render: function(data, type, row) {
-        if (!data || data === '') {
-            return '<div class="text-muted small">No image</div>';
-        }
-        return `
-            <div class="table-image-container">
-                <img src="/storage/public/${data}" 
-                     class="img-thumbnail table-image"
-                     alt="Item image"
-                     onerror="this.onerror=null;this.src='/images/default-item.png';">
-            </div>
-        `;
-    }
-},
+            
             { 
                 data: 'name', 
                 name: 'name',
@@ -254,19 +234,19 @@ $(document).ready(function() {
         ],
         columnDefs: [
             {
-                targets: [0, 1, 4, 5, 6], // Target specific columns by index
+                targets: [0, 3, 4, 5], // Target specific columns by index
                 className: 'text-center' // Center align these columns
             },
             {
-                targets: 2, // Name column
+                targets: 1, // Name column
                 className: 'align-middle' // Vertical align middle
             },
             {
-                targets: 3, // Category column
+                targets: 2, // Category column
                 className: 'align-middle' // Vertical align middle
             }
         ],
-        order: [[2, 'asc']], // Default sort by name column
+        order: [[1, 'asc']], // Default sort by name column
         responsive: true,
         language: {
             processing: '<i class="fa fa-spinner fa-spin fa-3x fa-fw"></i>'
@@ -373,6 +353,11 @@ $('#itemForm').submit(function(e) {
         }
     });
 });
+$('#category_id').select2({
+    placeholder: "Select a category",
+    allowClear: true,
+    dropdownParent: $('#itemModal')
+});
     // QR Code Generation Function
     function generateQRCode(itemData) {
         const qrContent = `Item: ${itemData.name}\nCategory: ${itemData.category_name}\nPrice: $${itemData.price}\nImage: ${itemData.image_url}`;
@@ -463,37 +448,37 @@ $('#confirmDelete').click(function() {
     });
 });
 
-// Image Preview Handler
-$('#image').change(function() {
-    const file = this.files[0];
-    if (!file) return;
+$('#images').change(function() {
+    $('#imagesPreview').empty();
+    $('#imagesError').text('');
     
-    // Validate file type
+    const files = this.files;
     const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/gif'];
-    if (!validTypes.includes(file.type)) {
-        $('#imageError').text('Only JPEG, PNG, JPG, and GIF images are allowed');
-        $(this).val('');
-        return;
-    }
     
-    // Validate file size (2MB max)
-    if (file.size > 2 * 1024 * 1024) {
-        $('#imageError').text('Image size must be less than 2MB');
-        $(this).val('');
-        return;
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        
+        if (!validTypes.includes(file.type)) {
+            $('#imagesError').text('Only JPEG, PNG, JPG, and GIF images are allowed');
+            continue;
+        }
+        
+        if (file.size > 2 * 1024 * 1024) {
+            $('#imagesError').text('Image size must be less than 2MB');
+            continue;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            $('#imagesPreview').append(`
+                <div class="image-preview-container me-2 mb-2">
+                    <img src="${e.target.result}" alt="Preview" style="max-height: 100px;" class="img-thumbnail">
+                </div>
+            `);
+        }
+        reader.readAsDataURL(file);
     }
-    
-    // Show preview
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        $('#imagePreview').show();
-        $('#previewImage').attr('src', e.target.result);
-    }
-    reader.readAsDataURL(file);
-    
-    $('#imageError').text('');
 });
-    
     // Download QR Code Handler
     $('#downloadQR').click(function() {
         const canvas = document.querySelector('#qrCode canvas');

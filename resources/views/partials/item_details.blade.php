@@ -1,23 +1,41 @@
 <div class="row">
-    <div class="col-md-4 text-center">
-    @if($item->image_path)
-    <img src="{{ asset('storage/public/'.$item->image_path) }}" 
-         class="img-fluid mb-3" 
-         style="max-height: 200px;"
-         onerror="this.onerror=null;this.src='/images/default-item.png';">
-@endif
-        
-        <div id="itemQrCode" class="mt-3"></div>
-        <button class="btn btn-sm btn-outline-primary mt-2" id="downloadItemQr">
-            <i class="fas fa-download"></i> Download QR
-        </button>
+    <div class="col-md-4">
+        <!-- Image Gallery Section -->
+        <div class="mb-4">
+            <h5 class="mb-3">Item Images</h5>
+        @if($item->images->count() > 0)
+    <div class="row g-2">
+        @foreach($item->images as $image)
+            <div class="col-6">
+                <div class="position-relative">
+                    <img src="{{ asset('storage/items/' . $image->image_path) }}" 
+                        class="img-fluid rounded border mb-2"
+                        style="max-height: 150px; width: 100%; object-fit: cover;"
+                        onerror="this.onerror=null;this.src='/images/default-item.png';">
+                </div>
+            </div>
+        @endforeach
     </div>
+@else
+    <div class="alert alert-info">No images available for this item</div>
+@endif
+        </div>
+
+        <!-- QR Code Section -->
+        <div class="text-center mt-4">
+            <div id="itemQrCode"></div>
+            <button class="btn btn-sm btn-outline-primary mt-2" id="downloadItemQr">
+                <i class="fas fa-download"></i> Download QR
+            </button>
+        </div>
+    </div>
+    
     <div class="col-md-8">
-        <h4>{{ $item->name }}</h4>
+        <h4 class="mb-4">{{ $item->name }}</h4>
         <table class="table table-bordered">
             <tr>
                 <th width="30%">Category</th>
-                <td>{{ $item->category->name }}</td>
+                <td>{{ $item->category->name ?? 'N/A' }}</td>
             </tr>
             <tr>
                 <th>Price</th>
@@ -40,7 +58,7 @@
 <script>
 $(document).ready(function() {
     // Generate QR Code when modal opens
-    const qrContent = `Item: {{ $item->name }}\nCategory: {{ $item->category->name }}\nPrice: ${{ number_format($item->price, 2) }}\nCreated: {{ $item->created_at->format('Y-m-d') }}`;
+    const qrContent = `Item: {{ $item->name }}\nCategory: {{ $item->category->name ?? 'N/A' }}\nPrice: ${{ number_format($item->price, 2) }}\nCreated: {{ $item->created_at->format('Y-m-d') }}`;
     
     new QRCode(document.getElementById("itemQrCode"), {
         text: qrContent,

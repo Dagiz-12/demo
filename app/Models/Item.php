@@ -13,12 +13,16 @@ class Item extends Model
         'category_id',
         'name',
         'price',
-        'image_path'
+        
         
     ];
 
     public function category()
     {
         return $this->belongsTo(Category::class);
+    }
+    public function images()
+    {
+        return $this->hasMany(ItemImage::class);
     }
 }

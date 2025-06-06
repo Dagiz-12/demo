@@ -18,7 +18,7 @@ class ItemController extends Controller
     public function index(Request $request)
     {
         if ($request->ajax()) {
-            $items = Item::with('category')->select(['id', 'category_id', 'name', 'price', 'image_path', 'created_at', 'updated_at'])
+            $items = Item::with('category', 'images')->select(['id', 'category_id', 'name', 'price', 'created_at', 'updated_at'])
                 ->get()
                 ->map(function ($item) {
                     // Ensure category is loaded
@@ -35,11 +35,7 @@ class ItemController extends Controller
                     return $item->price; // Return raw value for DataTables to format
                 })
                
-                ->addColumn('image', function($item) {
-                    return $item->image_path 
-                        ? '<img src="'.asset($item->image_path).'" alt="Item Image" style="max-height: 50px;">'
-                        : 'No Image';
-                })
+               
                 ->addColumn('action', function($item) {
                     return '<div class="d-flex justify-content-center">
                         <button class="btn btn-sm btn-primary mx-1 edit-btn" data-id="'.$item->id.'">
@@ -53,7 +49,7 @@ class ItemController extends Controller
                         </button>
                     </div>';
                 })
-                ->rawColumns(['image', 'action'])
+                ->rawColumns(['action'])
                 ->make(true);
         }
         
@@ -62,45 +58,45 @@ class ItemController extends Controller
     }
 
     public function show($id)
-    {
-        try {
-            $item = Item::with('category')->findOrFail($id);
-            return response()->json([
-                'success' => true,
-                'data' => $item,
-                'html' => view('partials.item_details', compact('item'))->render()
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Item not found'
-            ], 404);
-        }
+{
+    try {
+        $item = Item::with(['category', 'images'])->findOrFail($id);
+        return response()->json([
+            'success' => true,
+            'data' => $item,
+            'html' => view('partials.item_details', compact('item'))->render()
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Item not found'
+        ], 404);
     }
+}
 
     /**
      * Handle both store and update operations
      */
- public function createOrUpdate(Request $request)
+
+public function createOrUpdate(Request $request)
 {
     $rules = [
         'category_id' => 'required|exists:categories,id',
         'name' => 'required|string|max:255',
         'price' => 'required|numeric|min:0',
-        'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+        'images.*' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
     ];
 
-    // Only add unique validation for name if it's a new item or the name has changed
-    if (!$request->id || $request->name != Item::find($request->id)->name) {
+    if (!$request->id || $request->name != Item::find($request->id)?->name) {
         $rules['name'] = 'required|string|max:255|unique:items,name,'.$request->id;
     }
 
     $validator = Validator::make($request->all(), $rules, [
         'category_id.required' => 'Please select a category',
         'price.numeric' => 'Price must be a number',
-        'image.image' => 'The file must be an image',
-        'image.mimes' => 'Only JPEG, PNG, JPG, and GIF images are allowed',
-        'image.max' => 'Image size must be less than 2MB'
+        'images.*.image' => 'The file must be an image',
+        'images.*.mimes' => 'Only JPEG, PNG, JPG, and GIF images are allowed',
+        'images.*.max' => 'Image size must be less than 2MB'
     ]);
 
     if ($validator->fails()) {
@@ -111,36 +107,34 @@ class ItemController extends Controller
     }
 
     try {
-        $data = $request->except(['image', '_token']);
-        
-        if ($request->hasFile('image')) {
-                // Delete old image if exists
-                if ($request->id && $item = Item::find($request->id)) {
-                    if ($item->image_path && Storage::exists('public/' . $item->image_path)) {
-                        Storage::delete('public/' . $item->image_path);
-                    }
-                }
-
-                $filename = time().'_'.Str::slug($request->file('image')->getClientOriginalName());
-                $path = $request->file('image')->storeAs('public/items', $filename);
-                $data['image_path'] = 'items/'.$filename; // Store relative path without 'public/'
-            } else if ($request->id) {
-            // Keep the existing image if no new image is uploaded
-            $existingItem = Item::find($request->id);
-            if ($existingItem && $existingItem->image_path) {
-                $data['image_path'] = $existingItem->image_path;
-            }
-        }
-
+        // Create/update the item without image data
         $item = Item::updateOrCreate(
             ['id' => $request->id],
-            $data
+            $request->only(['category_id', 'name', 'price'])
         );
+
+        // Handle multiple image uploads
+        if ($request->hasFile('images')) {
+            // Delete old images if editing
+            if ($request->id) {
+                $item->images()->delete();
+            }
+
+            foreach ($request->file('images') as $image) {
+                $filename = time().'_'.Str::slug($image->getClientOriginalName());
+                $path = $image->storeAs('items', $filename);
+                
+                // Save to item_images table
+                $item->images()->create([
+                    'image_path' => 'items/'.$filename
+                ]);
+            }
+        }
         
         return response()->json([
             'success' => true,
             'message' => $request->id ? 'Item updated successfully' : 'Item created successfully',
-            'data' => $item
+            'data' => $item->load('images')
         ]);
         
     } catch (\Exception $e) {
@@ -151,7 +145,6 @@ class ItemController extends Controller
         ], 500);
     }
 }
-
     /**
      * Get item data for editing
      */
@@ -174,29 +167,32 @@ class ItemController extends Controller
     /**
      * Delete an item
      */
-    public function destroy($id)
-    {
-        try {
-            $item = Item::findOrFail($id);
-            
-            // Delete associated image
-            if ($item->image_path && Storage::exists(str_replace('/storage', 'public', $item->image_path))) {
-                Storage::delete(str_replace('/storage', 'public', $item->image_path));
+ public function destroy($id)
+{
+    try {
+        $item = Item::with('images')->findOrFail($id);
+        
+        // Delete all associated images
+        foreach ($item->images as $image) {
+            if (Storage::exists('public/' . $image->image_path)) {
+                Storage::delete('public/' . $image->image_path);
             }
-            
-            $item->delete();
-            
-            return response()->json([
-                'success' => true,
-                'message' => 'Item deleted successfully'
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error: ' . $e->getMessage()
-            ], 500);
         }
+        $item->images()->delete();
+        
+        $item->delete();
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Item deleted successfully'
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Error: ' . $e->getMessage()
+        ], 500);
     }
+}
 
     /**
      * Legacy store method that uses createOrUpdate
