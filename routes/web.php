@@ -4,6 +4,7 @@ use App\Http\Controllers\{CategoryController};
 use App\Http\Controllers\ItemController;
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\OrderController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -36,3 +37,7 @@ Route::get('/test-image', function() {
 
 Route::post('/items/{item}/quantities', [ItemController::class, 'syncQuantities'])
     ->name('items.quantities.sync');
+// routes/web.php
+
+Route::resource('orders', OrderController::class);
+Route::get('/orders/{order}/edit', [OrderController::class, 'edit'])->name('orders.edit');

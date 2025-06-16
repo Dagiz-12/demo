@@ -122,15 +122,13 @@ public function createOrUpdate(Request $request)
                 $item->images()->delete();
             }
 
-            foreach ($request->file('images') as $image) {
-                $filename = time().'_'.Str::slug($image->getClientOriginalName());
-                $path = $image->storeAs('items', $filename);
-                
-                // Save to item_images table
-                $item->images()->create([
-                    'image_path' => 'items/'.$filename
-                ]);
-            }
+            // In ItemController.php, change the image storage code to:
+                            foreach ($request->file('images') as $image) {
+                    $path = $image->store('items', 'public'); // Stores in storage/app/public/items
+                    $item->images()->create([
+                        'image_path' => $path // Stores the relative path
+                    ]);
+                }
         }
 
 

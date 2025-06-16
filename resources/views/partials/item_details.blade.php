@@ -11,11 +11,10 @@
                         @foreach($item->images as $image)
                             <div class="col-6">
                                 <div class="position-relative">
-                                    <img src="{{ Storage::url($image->image_path) }}" 
-                                        class="img-fluid rounded border mb-2"
-                                        style="max-height: 150px; width: 100%; object-fit: cover;"
-                                        onerror="this.onerror=null;this.src='/images/default-item.png';">
-                                </div>
+                                <img src="{{ asset('storage/' . str_replace('public/', '', $image->image_path)) }}" 
+                                    class="img-fluid rounded border mb-2"
+                                    style="max-height: 150px; width: 100%; object-fit: cover;"
+                                    onerror="this.onerror=null;this.src='{{ asset('images/default-item.png') }}';">
                             </div>
                         @endforeach
                     </div>

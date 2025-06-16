@@ -353,7 +353,16 @@
           <i class="bi bi-menu-button-wide"></i><span>Category</span>
         </a>
       </li><!-- End Components Nav -->
-      
+      <li class="nav-item">
+        <a class="nav-link" href="{{url('orders')}}">
+          <i class="bi bi-menu-button-wide"></i><span>Orders</span>
+        </a>
+      </li><!-- End Components Nav -->
+      <li class="nav-item">
+        <a class="nav-link" href="{{url('item')}}">
+          <i class="bi bi-menu-button-wide"></i><span>Item</span>
+        </a>
+      </li><!-- End Components Nav -->
      
 
     </ul>
@@ -419,7 +428,7 @@
     
     <!-- Add this before your closing </body> tag -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    @yield('scripts')
+    @stack('scripts')
 </body>
 <!-- END: Body-->
 </html>
